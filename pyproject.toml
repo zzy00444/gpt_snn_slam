@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gpt-snn-slam"
+version = "0.1.0"
+description = "End-to-end event-camera SLAM built from spiking neural networks"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = ["torch>=2.0"]
+
+[project.scripts]
+snn-slam-smoke = "snn_slam.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["snn_slam*"]
+
