@@ -138,8 +138,10 @@ def pose_geodesic_loss(predicted: Tensor, target: Tensor) -> Tensor:
     translation = (predicted[..., :3, 3] - target[..., :3, 3]).abs().mean()
     r_rel = predicted[..., :3, :3].transpose(-1, -2) @ target[..., :3, :3]
     trace = r_rel.diagonal(dim1=-2, dim2=-1).sum(-1)
-    angle = ((trace - 1.0) / 2.0).clamp(-1.0, 1.0).acos()
-    return translation + angle.mean()
+    # 1-cos(theta) is smooth at identity (acos(trace) has infinite gradient
+    # there) and is monotonic for the practical [0, pi] pose-error range.
+    rotation = ((3.0 - trace) / 2.0).clamp_min(0.0)
+    return translation + rotation.mean()
 
 
 __all__ = [
