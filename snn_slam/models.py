@@ -220,7 +220,16 @@ class AllSNN_SLAM(SNNBase):
             states = self._stream_states.get("states", {})
             pose = self._stream_states.get("pose")
             map_state = self._stream_states.get("map")
-            if not isinstance(pose, Tensor) or not isinstance(map_state, Tensor):
+            if (
+                not isinstance(pose, Tensor)
+                or not isinstance(map_state, Tensor)
+                or pose.shape[0] != batch
+                or map_state.shape[0] != batch
+                or pose.device != events.device
+                or pose.dtype != events.dtype
+                or map_state.dtype != events.dtype
+            ):
+                states = {}
                 pose = torch.eye(4, dtype=events.dtype, device=events.device).expand(batch, 4, 4).clone()
                 map_state = self.map.initial(batch, events.device, events.dtype)
         twists: List[Tensor] = []
