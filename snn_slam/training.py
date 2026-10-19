@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Optional
+import random
+from typing import Dict, Iterable, Optional
 
 import torch
 from torch import Tensor
@@ -19,6 +20,28 @@ class TrainBatch:
     depth: Optional[Tensor] = None
     occupancy: Optional[Tensor] = None
     depth_mask: Optional[Tensor] = None
+
+
+def move_batch(batch: TrainBatch, device: str | torch.device) -> TrainBatch:
+    """Move every tensor in a batch while preserving optional labels."""
+
+    target = torch.device(device)
+    return TrainBatch(
+        events=batch.events.to(target),
+        poses=batch.poses.to(target) if batch.poses is not None else None,
+        depth=batch.depth.to(target) if batch.depth is not None else None,
+        occupancy=batch.occupancy.to(target) if batch.occupancy is not None else None,
+        depth_mask=batch.depth_mask.to(target) if batch.depth_mask is not None else None,
+    )
+
+
+def seed_everything(seed: int) -> None:
+    """Seed Python and Torch for repeatable short experiments."""
+
+    random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
 
 def train_step(
@@ -46,6 +69,49 @@ def evaluate(model: AllSNN_SLAM, batch: TrainBatch) -> LossBreakdown:
     output = model(batch.events, reset=True)
     breakdown = slam_loss(output, batch.poses, batch.depth, batch.occupancy, depth_mask=batch.depth_mask)
     return LossBreakdown(*(value.detach() for value in breakdown.as_dict().values()))
+
+
+def _mean_metrics(metrics: Iterable[LossBreakdown]) -> Dict[str, float]:
+    values = list(metrics)
+    if not values:
+        raise ValueError("cannot aggregate an empty metric sequence")
+    keys = values[0].as_dict().keys()
+    return {key: sum(float(item.as_dict()[key]) for item in values) / len(values) for key in keys}
+
+
+def train_epoch(
+    model: AllSNN_SLAM,
+    loader,
+    optimizer: torch.optim.Optimizer,
+    device: str | torch.device = "cpu",
+    grad_clip: Optional[float] = 1.0,
+    max_batches: Optional[int] = None,
+) -> Dict[str, float]:
+    """Train over a DataLoader of :class:`TrainBatch` objects."""
+
+    metrics = []
+    for index, batch in enumerate(loader):
+        if max_batches is not None and index >= max_batches:
+            break
+        metrics.append(train_step(model, move_batch(batch, device), optimizer, grad_clip))
+    return _mean_metrics(metrics)
+
+
+@torch.no_grad()
+def evaluate_epoch(
+    model: AllSNN_SLAM,
+    loader,
+    device: str | torch.device = "cpu",
+    max_batches: Optional[int] = None,
+) -> Dict[str, float]:
+    """Evaluate a DataLoader of :class:`TrainBatch` objects."""
+
+    metrics = []
+    for index, batch in enumerate(loader):
+        if max_batches is not None and index >= max_batches:
+            break
+        metrics.append(evaluate(model, move_batch(batch, device)))
+    return _mean_metrics(metrics)
 
 
 def synthetic_batch(
@@ -80,5 +146,14 @@ def synthetic_batch(
     return TrainBatch(events=events, poses=poses, depth=depth)
 
 
-__all__ = ["TrainBatch", "train_step", "evaluate", "synthetic_batch"]
+__all__ = [
+    "TrainBatch",
+    "move_batch",
+    "seed_everything",
+    "train_step",
+    "evaluate",
+    "train_epoch",
+    "evaluate_epoch",
+    "synthetic_batch",
+]
 

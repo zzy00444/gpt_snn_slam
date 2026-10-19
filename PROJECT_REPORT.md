@@ -97,10 +97,12 @@ map_t = clamp(decay * map_(t-1) + (1 - decay) * projected_write, 0, 1)
 | `snn_slam/se3.py` | SO(3)/SE(3) 指数映射、积分和位姿损失 | 所有小角度公式必须检查有限梯度 |
 | `snn_slam/models.py` | 主模型、流式状态和地图 | 新增输出时同步更新 `SLAMOutput` 和 README |
 | `snn_slam/losses.py` | 监督/弱监督损失 | 支持缺失标签，避免把无标签项变成常数错误 |
-| `snn_slam/training.py` | `train_step`、评估、合成 batch | 数据集接入后保留 `TrainBatch` 字段契约 |
+| `snn_slam/training.py` | `train_step`、epoch 训练/评估、合成 batch | 数据集接入后保留 `TrainBatch` 字段契约 |
 | `snn_slam/datasets.py` | TUM RGB-D 到伪事件/监督窗口 | 不把 TUM 特定逻辑扩散到模型代码 |
 | `snn_slam/metrics.py` | ATE、RPE、深度 AbsRel/RMSE | 指标输入保持 `[B,T,...]` 或 `[T,...]` |
 | `snn_slam/__main__.py` | 无数据集 smoke CLI | 作为安装后的最小回归入口 |
+| `scripts/run_tum_sequence.py` | 单窗口 TUM smoke/指标验证 | 适合快速检查数据路径和标定 |
+| `scripts/train_tum.py` | DataLoader 批量训练与验证 | 保存可恢复的 PyTorch checkpoint |
 | `tests/test_smoke.py` | 形状、反向和边界回归 | 每次改动先运行这些快速测试 |
 
 ## 5. 公共接口和张量契约
@@ -179,6 +181,7 @@ python -m compileall -q snn_slam tests
 python -c "from tests.test_smoke import *; test_event_encoder_handles_empty_and_boundaries(); test_all_snn_forward_and_gradient(); test_streaming_step_matches_interface(); test_se3_exp_is_finite_at_identity(); print('all smoke tests passed')"
 python -m snn_slam --steps 4 --height 32 --width 32
 python scripts/run_tum_sequence.py --root F:/BaiduNetdiskDownload/rgbd_dataset_freiburg1_desk --window 8 --height 64 --width 96 --max-frames 64 --eval-windows 4 --train-steps 2
+python scripts/train_tum.py --root F:/BaiduNetdiskDownload/rgbd_dataset_freiburg1_desk --window 8 --height 64 --width 96 --max-frames 128 --batch-size 2 --epochs 1 --max-batches 1
 ```
 
 如果环境安装了 pytest，也可以直接运行 `pytest -q`。当前仓库只把 PyTorch 列为运行依赖，没有强制引入 pytest。

@@ -71,6 +71,15 @@ python scripts/run_tum_sequence.py \
 
 该适配器用于真实连续帧的开发验证，不能替代真实事件相机数据。
 
+批量训练和验证可以使用：
+
+```bash
+python scripts/train_tum.py \
+  --root F:/BaiduNetdiskDownload/rgbd_dataset_freiburg1_desk \
+  --window 8 --height 64 --width 96 --max-frames 128 \
+  --batch-size 2 --epochs 10 --checkpoint checkpoints/tum_desk.pt
+```
+
 真实数据接入时，数据加载器只需要把每个时间窗转换成事件体素。`events_to_voxel_grid` 接受 `(x,y,t,p)` 事件，自动处理空窗口、边界事件、正负极性和时间归一化。
 
 ## 目录
