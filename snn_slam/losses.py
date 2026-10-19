@@ -38,6 +38,8 @@ def _zero_like(reference: Tensor) -> Tensor:
 
 
 def _masked_l1(predicted: Tensor, target: Tensor, mask: Optional[Tensor] = None) -> Tensor:
+    if target.ndim == predicted.ndim - 1:
+        target = target.unsqueeze(-3)
     if predicted.shape != target.shape:
         target = F.interpolate(
             target.reshape(-1, *target.shape[-3:]),
@@ -47,6 +49,8 @@ def _masked_l1(predicted: Tensor, target: Tensor, mask: Optional[Tensor] = None)
         ).reshape_as(predicted)
     error = (predicted - target).abs()
     if mask is not None:
+        if mask.ndim == error.ndim - 1:
+            mask = mask.unsqueeze(-3)
         if mask.shape != error.shape:
             mask = F.interpolate(mask.float().reshape(-1, 1, *mask.shape[-2:]), size=error.shape[-2:], mode="nearest")
             mask = mask.reshape_as(error)
@@ -85,6 +89,8 @@ def slam_loss(
         depth = _masked_l1(output.depth, target_depth.to(output.depth), depth_mask)
     if target_occupancy is not None:
         target = target_occupancy.to(output.occupancy)
+        if target.ndim == output.occupancy.ndim - 1:
+            target = target.unsqueeze(-3)
         if target.shape != output.occupancy.shape:
             target = F.interpolate(
                 target.reshape(-1, *target.shape[-3:]),
