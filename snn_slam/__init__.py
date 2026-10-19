@@ -10,12 +10,13 @@ depth and occupancy-map predictions.
 
 from .encoding import EventVoxelEncoder, event_rate, events_to_frames, events_to_voxel_grid
 from .losses import LossBreakdown, slam_loss
-from .models import AllSNN_SLAM, DifferentiableOccupancyMap, SLAMOutput
+from .models import AllSNN_SLAM, DifferentiableOccupancyMap, SNN_SLAM, SLAMOutput
 from .se3 import integrate_twists, inverse, pose_geodesic_loss, se3_exp, so3_exp
 from .snn import LIFNeuron, SNNBase, SpikingConv2d, SpikingLinear, mean_rate, spike_function
 
 __all__ = [
     "AllSNN_SLAM",
+    "SNN_SLAM",
     "SLAMOutput",
     "DifferentiableOccupancyMap",
     "EventVoxelEncoder",

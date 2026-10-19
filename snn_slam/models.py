@@ -255,5 +255,7 @@ class AllSNN_SLAM(SNNBase):
         return self.forward(frame.unsqueeze(1) if frame.ndim == 4 else frame, reset=False)
 
 
-__all__ = ["SLAMOutput", "AllSNN_SLAM", "DifferentiableOccupancyMap"]
+SNN_SLAM = AllSNN_SLAM
+
+__all__ = ["SLAMOutput", "AllSNN_SLAM", "SNN_SLAM", "DifferentiableOccupancyMap"]
 
