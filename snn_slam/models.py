@@ -232,7 +232,7 @@ class AllSNN_SLAM(SNNBase):
                 self._stream_states[key] = state.detach()
 
     @staticmethod
-    def _normalise_input(events: Tensor, channels: int) -> Tensor:
+    def _normalise_input(events: Tensor, channels: int, dtype: torch.dtype) -> Tensor:
         if events.ndim == 4:
             events = events.unsqueeze(1)
         if events.ndim != 5:
@@ -242,7 +242,7 @@ class AllSNN_SLAM(SNNBase):
                 events = events.sum(dim=2, keepdim=True)
             else:
                 raise ValueError(f"expected {channels} event channels, got {events.shape[2]}")
-        return events.float()
+        return events.to(dtype=dtype)
 
     def _step(
         self,
@@ -287,7 +287,8 @@ class AllSNN_SLAM(SNNBase):
         return twist, next_pose, depth, map_state, next_states, features
 
     def forward(self, events: Tensor, reset: bool = True) -> SLAMOutput:
-        events = self._normalise_input(events, self.in_channels)
+        parameter = next(self.parameters())
+        events = self._normalise_input(events, self.in_channels, parameter.dtype)
         batch, steps = events.shape[:2]
         if reset:
             states: Dict[str, object] = {}
