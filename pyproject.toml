@@ -10,6 +10,9 @@ readme = "README.md"
 requires-python = ">=3.9"
 dependencies = ["torch>=2.0"]
 
+[project.optional-dependencies]
+data = ["pillow>=9.0", "numpy>=1.21"]
+
 [project.scripts]
 snn-slam-smoke = "snn_slam.__main__:main"
 

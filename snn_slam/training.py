@@ -18,6 +18,7 @@ class TrainBatch:
     poses: Optional[Tensor] = None
     depth: Optional[Tensor] = None
     occupancy: Optional[Tensor] = None
+    depth_mask: Optional[Tensor] = None
 
 
 def train_step(
@@ -31,7 +32,7 @@ def train_step(
     model.train()
     optimizer.zero_grad(set_to_none=True)
     output = model(batch.events, reset=True)
-    breakdown = slam_loss(output, batch.poses, batch.depth, batch.occupancy)
+    breakdown = slam_loss(output, batch.poses, batch.depth, batch.occupancy, depth_mask=batch.depth_mask)
     breakdown.total.backward()
     if grad_clip is not None:
         torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
@@ -43,7 +44,7 @@ def train_step(
 def evaluate(model: AllSNN_SLAM, batch: TrainBatch) -> LossBreakdown:
     model.eval()
     output = model(batch.events, reset=True)
-    breakdown = slam_loss(output, batch.poses, batch.depth, batch.occupancy)
+    breakdown = slam_loss(output, batch.poses, batch.depth, batch.occupancy, depth_mask=batch.depth_mask)
     return LossBreakdown(*(value.detach() for value in breakdown.as_dict().values()))
 
 

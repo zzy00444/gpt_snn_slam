@@ -17,6 +17,7 @@ pip install -e .
 ```
 
 唯一的运行依赖是 PyTorch 2.0 或更高版本，不依赖 SpikingJelly、CUDA 或 ROS。
+如果使用 TUM RGB-D 图片序列适配器，额外安装 `pip install -e .[data]`。
 
 ## 最小运行
 
@@ -58,6 +59,17 @@ optimizer.step()
 ```bash
 python -m snn_slam --steps 4 --height 32 --width 32
 ```
+
+仓库也提供了 TUM RGB-D 连续帧适配器。它会将相邻 RGB 帧的对数亮度变化转换为正/负伪事件，并保留真实深度和 ground-truth 位姿用于验证：
+
+```bash
+python scripts/run_tum_sequence.py \
+  --root F:/BaiduNetdiskDownload/rgbd_dataset_freiburg1_desk \
+  --window 8 --height 64 --width 96 --max-frames 64 \
+  --eval-windows 4 --train-steps 2
+```
+
+该适配器用于真实连续帧的开发验证，不能替代真实事件相机数据。
 
 真实数据接入时，数据加载器只需要把每个时间窗转换成事件体素。`events_to_voxel_grid` 接受 `(x,y,t,p)` 事件，自动处理空窗口、边界事件、正负极性和时间归一化。
 

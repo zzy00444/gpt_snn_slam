@@ -16,8 +16,9 @@
 | 可微深度射线反投影地图 | 已完成基线 |
 | 流式推理与膜电位状态 | 已完成 |
 | 真实事件数据集适配 | 待实现 |
+| TUM RGB-D 连续帧伪事件适配 | 已完成开发验证 |
 | 回环检测与全局图优化 | 待实现 |
-| 公共数据集指标与性能报告 | 待实现 |
+| 公共数据集指标与性能报告 | 已加入基础指标接口 |
 
 ## 2. 系统目标和边界
 
@@ -81,6 +82,12 @@ map_t = clamp(decay * map_(t-1) + (1 - decay) * projected_write, 0, 1)
 
 默认归一化焦距为 `(1,1)`，真实数据应根据相机标定传入 `focal_length_normalized=(fx, fy)`。地图写入仍然保留从深度和位姿到地图损失的梯度链路。
 
+### 3.5 TUM RGB-D 开发适配
+
+`TUMRGBDWindowDataset` 读取 TUM Freiburg 目录中的 `rgb.txt`、`depth.txt`、`groundtruth.txt` 和 RGB/深度 PNG。对于每个相邻 RGB 帧，适配器计算对数亮度差并生成正、负两个伪事件通道；深度按 TUM 的 `5000` 缩放因子转换为米，ground truth 位姿转换为相对于窗口首帧的齐次矩阵。默认只保留同时有深度和位姿的帧窗口。
+
+这条路径的目的是真实图像运动、深度监督、位姿损失和地图写入的开发闭环。它不模拟事件相机的真实异步时间戳、事件噪声、阈值漂移和运动模糊，正式结果仍需在事件数据集上复测。
+
 ## 4. 代码组织
 
 | 文件 | 作用 | 维护要点 |
@@ -91,6 +98,8 @@ map_t = clamp(decay * map_(t-1) + (1 - decay) * projected_write, 0, 1)
 | `snn_slam/models.py` | 主模型、流式状态和地图 | 新增输出时同步更新 `SLAMOutput` 和 README |
 | `snn_slam/losses.py` | 监督/弱监督损失 | 支持缺失标签，避免把无标签项变成常数错误 |
 | `snn_slam/training.py` | `train_step`、评估、合成 batch | 数据集接入后保留 `TrainBatch` 字段契约 |
+| `snn_slam/datasets.py` | TUM RGB-D 到伪事件/监督窗口 | 不把 TUM 特定逻辑扩散到模型代码 |
+| `snn_slam/metrics.py` | ATE、RPE、深度 AbsRel/RMSE | 指标输入保持 `[B,T,...]` 或 `[T,...]` |
 | `snn_slam/__main__.py` | 无数据集 smoke CLI | 作为安装后的最小回归入口 |
 | `tests/test_smoke.py` | 形状、反向和边界回归 | 每次改动先运行这些快速测试 |
 
@@ -169,9 +178,26 @@ print(metrics.as_dict())
 python -m compileall -q snn_slam tests
 python -c "from tests.test_smoke import *; test_event_encoder_handles_empty_and_boundaries(); test_all_snn_forward_and_gradient(); test_streaming_step_matches_interface(); test_se3_exp_is_finite_at_identity(); print('all smoke tests passed')"
 python -m snn_slam --steps 4 --height 32 --width 32
+python scripts/run_tum_sequence.py --root F:/BaiduNetdiskDownload/rgbd_dataset_freiburg1_desk --window 8 --height 64 --width 96 --max-frames 64 --eval-windows 4 --train-steps 2
 ```
 
 如果环境安装了 pytest，也可以直接运行 `pytest -q`。当前仓库只把 PyTorch 列为运行依赖，没有强制引入 pytest。
+
+### 7.1 本地 TUM 实际数据 smoke 记录
+
+已在 `F:/BaiduNetdiskDownload/rgbd_dataset_freiburg1_desk` 上完成一次真实图片序列闭环验证：窗口长度 3、缩放到 `24x32`、保留 8 个有效 RGB-D/ground-truth 帧、模型 `feature_channels=32`、地图大小 32，并执行 1 次 AdamW 更新。一次运行得到：
+
+| 指标 | 数值 |
+| --- | ---: |
+| train total | 4.93385 |
+| train pose | 0.07558 |
+| train depth | 4.85803 |
+| ATE RMSE | 0.094499 m |
+| RPE translation | 0.074266 m |
+| depth AbsRel | 4.321810 |
+| depth RMSE | 7.527359 m |
+
+这些数字只证明数据读取、伪事件编码、监督损失、反向传播和指标计算可以串通；训练步数极少，不能作为模型精度结论。正式实验需要固定窗口划分、训练/验证序列、随机种子和多轮优化。
 
 ## 8. 已知限制和风险
 
@@ -185,9 +211,9 @@ python -m snn_slam --steps 4 --height 32 --width 32
 
 ### P0：数据闭环
 
-- 增加统一事件数据集接口和 `DataLoader` 示例；
+- 将 TUM 适配器抽象为统一事件数据集接口，并增加 `DataLoader` 示例；
 - 支持相机内参、主点、时间戳单位和事件极性约定；
-- 增加 ATE/RPE、深度和地图指标脚本。
+- 增加地图 IoU、轨迹对齐和可复现实验汇总脚本。
 
 ### P1：SLAM 前端增强
 
