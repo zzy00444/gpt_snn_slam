@@ -1,6 +1,6 @@
 import torch
 
-from snn_slam import AllSNN_SLAM, events_to_voxel_grid, slam_loss
+from snn_slam import AllSNN_SLAM, events_to_voxel_grid, se3_exp, slam_loss, so3_exp
 
 
 def test_event_encoder_handles_empty_and_boundaries():
@@ -30,4 +30,12 @@ def test_streaming_step_matches_interface():
     model.reset_state()
     output = model.step(torch.rand(2, 2, 24, 24))
     assert output.twists.shape == (2, 1, 6)
+
+
+def test_se3_exp_is_finite_at_identity():
+    rotation = torch.zeros(3, requires_grad=True)
+    transform_twist = torch.zeros(6, requires_grad=True)
+    (so3_exp(rotation).sum() + se3_exp(transform_twist).sum()).backward()
+    assert torch.isfinite(rotation.grad).all()
+    assert torch.isfinite(transform_twist.grad).all()
 

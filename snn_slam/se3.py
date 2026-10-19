@@ -37,7 +37,10 @@ def so3_exp(rotation_vector: Tensor) -> Tensor:
     if rotation_vector.shape[-1] != 3:
         raise ValueError("rotation_vector must end in 3")
     theta2 = (rotation_vector * rotation_vector).sum(-1, keepdim=True)
-    theta = theta2.sqrt()
+    # The epsilon is inside sqrt so its derivative is finite at the origin;
+    # a clamp on theta alone would still backpropagate sqrt'(0) = inf.
+    theta_safe2 = theta2 + 1e-12
+    theta = theta_safe2.sqrt()
     omega_hat = skew(rotation_vector)
     eye = torch.eye(3, dtype=rotation_vector.dtype, device=rotation_vector.device)
     eye = eye.expand(rotation_vector.shape[:-1] + (3, 3))
@@ -45,12 +48,12 @@ def so3_exp(rotation_vector: Tensor) -> Tensor:
     a = torch.where(
         theta2 < 1e-8,
         1.0 - theta2 / 6.0 + theta2 * theta2 / 120.0,
-        torch.sin(theta) / theta.clamp_min(1e-8),
+        torch.sin(theta) / theta,
     )
     b = torch.where(
         theta2 < 1e-8,
         0.5 - theta2 / 24.0 + theta2 * theta2 / 720.0,
-        (1.0 - torch.cos(theta)) / theta2.clamp_min(1e-8),
+        (1.0 - torch.cos(theta)) / theta_safe2,
     )
     return eye + a[..., None] * omega_hat + b[..., None] * (omega_hat @ omega_hat)
 
@@ -65,18 +68,19 @@ def se3_exp(twist: Tensor) -> Tensor:
     rotation = so3_exp(rotation_vector)
     omega_hat = skew(rotation_vector)
     theta2 = (rotation_vector * rotation_vector).sum(-1, keepdim=True)
-    theta = theta2.sqrt()
+    theta_safe2 = theta2 + 1e-12
+    theta = theta_safe2.sqrt()
     eye = torch.eye(3, dtype=twist.dtype, device=twist.device)
     eye = eye.expand(twist.shape[:-1] + (3, 3))
     a = torch.where(
         theta2 < 1e-8,
         0.5 - theta2 / 24.0 + theta2 * theta2 / 720.0,
-        (1.0 - torch.cos(theta)) / theta2.clamp_min(1e-8),
+        (1.0 - torch.cos(theta)) / theta_safe2,
     )
     b = torch.where(
         theta2 < 1e-8,
         1.0 / 6.0 - theta2 / 120.0 + theta2 * theta2 / 5040.0,
-        (theta - torch.sin(theta)) / theta.clamp_min(1e-8).pow(3),
+        (theta - torch.sin(theta)) / theta.pow(3),
     )
     v_matrix = eye + a[..., None] * omega_hat + b[..., None] * (omega_hat @ omega_hat)
     transformed_translation = (v_matrix @ translation.unsqueeze(-1)).squeeze(-1)
