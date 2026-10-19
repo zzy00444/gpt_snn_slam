@@ -10,6 +10,7 @@ from snn_slam import (
     se3_exp,
     slam_loss,
     so3_exp,
+    occupancy_iou,
 )
 from snn_slam.training import load_checkpoint, save_checkpoint
 
@@ -59,6 +60,8 @@ def test_metrics_are_zero_for_identical_targets():
     values = depth_metrics(depth, depth)
     assert values["abs_rel"].item() == 0.0
     assert values["rmse"].item() == 0.0
+    occupancy = torch.zeros(1, 1, 4, 4)
+    assert occupancy_iou(occupancy, occupancy).item() == 1.0
 
 
 def test_checkpoint_round_trip(tmp_path: Path):

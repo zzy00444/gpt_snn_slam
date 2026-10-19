@@ -11,7 +11,7 @@ depth and occupancy-map predictions.
 from .encoding import EventVoxelEncoder, event_rate, events_to_frames, events_to_voxel_grid
 from .datasets import TUMFrame, TUMRGBDWindowDataset, collate_tum_batches
 from .losses import LossBreakdown, slam_loss
-from .metrics import absolute_trajectory_error, depth_metrics, evaluate_output, relative_pose_error
+from .metrics import absolute_trajectory_error, depth_metrics, evaluate_output, occupancy_iou, relative_pose_error
 from .models import AllSNN_SLAM, DifferentiableOccupancyMap, SNN_SLAM, SLAMOutput
 from .se3 import integrate_twists, inverse, pose_geodesic_loss, se3_exp, so3_exp
 from .snn import LIFNeuron, SNNBase, SpikingConv2d, SpikingLinear, mean_rate, spike_function
@@ -33,6 +33,7 @@ __all__ = [
     "absolute_trajectory_error",
     "relative_pose_error",
     "depth_metrics",
+    "occupancy_iou",
     "evaluate_output",
     "LIFNeuron",
     "SpikingConv2d",

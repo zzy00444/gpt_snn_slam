@@ -63,11 +63,26 @@ def depth_metrics(predicted: Tensor, target: Tensor, mask: Optional[Tensor] = No
     return {"abs_rel": abs_rel, "rmse": rmse}
 
 
+def occupancy_iou(predicted: Tensor, target: Tensor, threshold: float = 0.5) -> Tensor:
+    """Binary intersection-over-union for predicted local occupancy maps."""
+
+    if predicted.ndim == target.ndim - 1:
+        target = target.unsqueeze(-3)
+    if predicted.shape != target.shape:
+        raise ValueError("predicted and target occupancy tensors must have equal shape")
+    predicted_binary = predicted >= threshold
+    target_binary = target >= threshold
+    intersection = (predicted_binary & target_binary).sum().float()
+    union = (predicted_binary | target_binary).sum().float()
+    return torch.where(union > 0, intersection / union, torch.ones_like(union))
+
+
 def evaluate_output(
     output: SLAMOutput,
     target_poses: Tensor,
     target_depth: Optional[Tensor] = None,
     depth_mask: Optional[Tensor] = None,
+    target_occupancy: Optional[Tensor] = None,
 ) -> Dict[str, Tensor]:
     """Calculate trajectory metrics and optional depth metrics."""
 
@@ -77,8 +92,16 @@ def evaluate_output(
     }
     if target_depth is not None:
         result.update({f"depth_{key}": value for key, value in depth_metrics(output.depth, target_depth, depth_mask).items()})
+    if target_occupancy is not None:
+        result["occupancy_iou"] = occupancy_iou(output.occupancy, target_occupancy)
     return result
 
 
-__all__ = ["absolute_trajectory_error", "relative_pose_error", "depth_metrics", "evaluate_output"]
+__all__ = [
+    "absolute_trajectory_error",
+    "relative_pose_error",
+    "depth_metrics",
+    "occupancy_iou",
+    "evaluate_output",
+]
 

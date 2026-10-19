@@ -86,6 +86,8 @@ map_t = clamp(decay * map_(t-1) + (1 - decay) * projected_write, 0, 1)
 
 `TUMRGBDWindowDataset` 读取 TUM Freiburg 目录中的 `rgb.txt`、`depth.txt`、`groundtruth.txt` 和 RGB/深度 PNG。对于每个相邻 RGB 帧，适配器计算对数亮度差并生成正、负两个伪事件通道；深度按 TUM 的 `5000` 缩放因子转换为米，ground truth 位姿转换为相对于窗口首帧的齐次矩阵。默认只保留同时有深度和位姿的帧窗口。
 
+TUM 脚本默认将 Freiburg1 RGB 内参 `fx=517.3, fy=516.5` 和原始分辨率 `640x480` 转换为归一化焦距 `(2fx/W, 2fy/H)`，再传给地图射线投影。更换相机时必须同步修改这四个命令行参数。
+
 这条路径的目的是真实图像运动、深度监督、位姿损失和地图写入的开发闭环。它不模拟事件相机的真实异步时间戳、事件噪声、阈值漂移和运动模糊，正式结果仍需在事件数据集上复测。
 
 ## 4. 代码组织
@@ -99,7 +101,7 @@ map_t = clamp(decay * map_(t-1) + (1 - decay) * projected_write, 0, 1)
 | `snn_slam/losses.py` | 监督/弱监督损失 | 支持缺失标签，避免把无标签项变成常数错误 |
 | `snn_slam/training.py` | `train_step`、epoch 训练/评估、合成 batch | 数据集接入后保留 `TrainBatch` 字段契约 |
 | `snn_slam/datasets.py` | TUM RGB-D 到伪事件/监督窗口 | 不把 TUM 特定逻辑扩散到模型代码 |
-| `snn_slam/metrics.py` | ATE、RPE、深度 AbsRel/RMSE | 指标输入保持 `[B,T,...]` 或 `[T,...]` |
+| `snn_slam/metrics.py` | ATE、RPE、深度 AbsRel/RMSE、occupancy IoU | 指标输入保持 `[B,T,...]` 或 `[T,...]` |
 | `snn_slam/__main__.py` | 无数据集 smoke CLI | 作为安装后的最小回归入口 |
 | `scripts/run_tum_sequence.py` | 单窗口 TUM smoke/指标验证 | 适合快速检查数据路径和标定 |
 | `scripts/train_tum.py` | DataLoader 批量训练与验证 | 保存可恢复的 PyTorch checkpoint |

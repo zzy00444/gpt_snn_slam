@@ -30,6 +30,10 @@ def main() -> None:
     parser.add_argument("--stride", type=int, default=1)
     parser.add_argument("--height", type=int, default=64)
     parser.add_argument("--width", type=int, default=96)
+    parser.add_argument("--fx-px", type=float, default=517.3)
+    parser.add_argument("--fy-px", type=float, default=516.5)
+    parser.add_argument("--sensor-width", type=int, default=640)
+    parser.add_argument("--sensor-height", type=int, default=480)
     parser.add_argument("--max-frames", type=int, default=128)
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument("--epochs", type=int, default=1)
@@ -75,6 +79,10 @@ def main() -> None:
     model = AllSNN_SLAM(
         feature_channels=args.feature_channels,
         map_size=args.map_size,
+        focal_length_normalized=(
+            2.0 * args.fx_px / args.sensor_width,
+            2.0 * args.fy_px / args.sensor_height,
+        ),
     ).to(args.device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
     start_epoch = 0

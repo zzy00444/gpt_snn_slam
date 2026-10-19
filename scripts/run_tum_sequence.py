@@ -35,6 +35,10 @@ def main() -> None:
     parser.add_argument("--window", type=int, default=8)
     parser.add_argument("--height", type=int, default=64)
     parser.add_argument("--width", type=int, default=96)
+    parser.add_argument("--fx-px", type=float, default=517.3)
+    parser.add_argument("--fy-px", type=float, default=516.5)
+    parser.add_argument("--sensor-width", type=int, default=640)
+    parser.add_argument("--sensor-height", type=int, default=480)
     parser.add_argument("--max-frames", type=int, default=64)
     parser.add_argument("--eval-windows", type=int, default=4)
     parser.add_argument("--train-steps", type=int, default=0, help="gradient steps on initial windows")
@@ -49,7 +53,15 @@ def main() -> None:
         image_size=(args.height, args.width),
         max_frames=args.max_frames,
     )
-    model = AllSNN_SLAM(feature_channels=32, map_size=32).to(args.device)
+    focal_normalized = (
+        2.0 * args.fx_px / args.sensor_width,
+        2.0 * args.fy_px / args.sensor_height,
+    )
+    model = AllSNN_SLAM(
+        feature_channels=32,
+        map_size=32,
+        focal_length_normalized=focal_normalized,
+    ).to(args.device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
     for step in range(args.train_steps):

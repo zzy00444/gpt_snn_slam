@@ -70,6 +70,7 @@ python scripts/run_tum_sequence.py \
 ```
 
 该适配器用于真实连续帧的开发验证，不能替代真实事件相机数据。
+脚本默认使用 Freiburg1 RGB 相机内参 `fx=517.3, fy=516.5`（原始传感器 `640x480`），并转换为模型使用的归一化焦距；更换序列时请通过 `--fx-px`、`--fy-px`、`--sensor-width` 和 `--sensor-height` 传入对应标定。
 
 批量训练和验证可以使用：
 
@@ -77,7 +78,8 @@ python scripts/run_tum_sequence.py \
 python scripts/train_tum.py \
   --root F:/BaiduNetdiskDownload/rgbd_dataset_freiburg1_desk \
   --window 8 --height 64 --width 96 --max-frames 128 \
-  --batch-size 2 --epochs 10 --checkpoint checkpoints/tum_desk.pt
+  --batch-size 2 --epochs 10 --checkpoint checkpoints/tum_desk.pt \
+  --fx-px 517.3 --fy-px 516.5 --sensor-width 640 --sensor-height 480
 ```
 
 训练脚本会保存模型、优化器、epoch、配置和验证指标。使用相同模型配置可以从断点继续：
