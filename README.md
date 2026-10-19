@@ -80,6 +80,13 @@ python scripts/train_tum.py \
   --batch-size 2 --epochs 10 --checkpoint checkpoints/tum_desk.pt
 ```
 
+训练脚本会保存模型、优化器、epoch、配置和验证指标。使用相同模型配置可以从断点继续：
+
+```bash
+python scripts/train_tum.py --root F:/BaiduNetdiskDownload/rgbd_dataset_freiburg1_desk \
+  --checkpoint checkpoints/tum_desk.pt --resume --epochs 10
+```
+
 真实数据接入时，数据加载器只需要把每个时间窗转换成事件体素。`events_to_voxel_grid` 接受 `(x,y,t,p)` 事件，自动处理空窗口、边界事件、正负极性和时间归一化。
 
 ## 目录

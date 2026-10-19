@@ -150,6 +150,8 @@ model.detach_state()             # 截断 BPTT 时使用
 4. 使用截断 BPTT 训练长序列，定期 `detach_state()`，避免计算图跨越整个序列。
 5. 在验证集报告 ATE、RPE、深度 AbsRel/RMSE、地图 IoU 和平均脉冲率。
 
+`scripts/train_tum.py` 会按不重叠窗口优先的规则划分训练/验证窗口，并保存模型参数、优化器状态、epoch、命令行配置和最近指标。传入 `--resume` 可继续训练；恢复时使用严格的模型 state 校验，配置与模型结构不匹配会立即报错。
+
 训练示例：
 
 ```python
@@ -173,6 +175,7 @@ print(metrics.as_dict())
 - 单帧 streaming `step` 以及 batch 大小切换时的状态重置；
 - `so3_exp`/`se3_exp` 在零旋转处的有限梯度；
 - 合成 smoke CLI 的单步训练。
+- TUM DataLoader 的批量训练、验证、轨迹指标和 checkpoint 恢复。
 
 本机验证命令：
 

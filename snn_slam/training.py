@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import random
+from pathlib import Path
 from typing import Dict, Iterable, Optional
 
 import torch
@@ -42,6 +43,48 @@ def seed_everything(seed: int) -> None:
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
+
+def save_checkpoint(
+    path: str | Path,
+    model: AllSNN_SLAM,
+    optimizer: Optional[torch.optim.Optimizer] = None,
+    epoch: int = 0,
+    extra: Optional[Dict[str, object]] = None,
+) -> None:
+    """Save model, optimizer and experiment metadata in one portable file."""
+
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "model": model.state_dict(),
+        "epoch": int(epoch),
+        "extra": extra or {},
+    }
+    if optimizer is not None:
+        payload["optimizer"] = optimizer.state_dict()
+    torch.save(payload, target)
+
+
+def load_checkpoint(
+    path: str | Path,
+    model: AllSNN_SLAM,
+    optimizer: Optional[torch.optim.Optimizer] = None,
+    map_location: str | torch.device = "cpu",
+) -> Dict[str, object]:
+    """Restore a checkpoint and return its metadata.
+
+    ``strict=True`` is intentional: silently accepting a changed architecture
+    would produce a plausible but invalid SLAM experiment.
+    """
+
+    checkpoint = torch.load(Path(path), map_location=map_location, weights_only=False)
+    if "model" not in checkpoint:
+        raise ValueError(f"checkpoint has no model state: {path}")
+    model.load_state_dict(checkpoint["model"], strict=True)
+    if optimizer is not None and "optimizer" in checkpoint:
+        optimizer.load_state_dict(checkpoint["optimizer"])
+    return checkpoint
 
 
 def train_step(
@@ -114,6 +157,33 @@ def evaluate_epoch(
     return _mean_metrics(metrics)
 
 
+@torch.no_grad()
+def evaluate_slam_epoch(
+    model: AllSNN_SLAM,
+    loader,
+    device: str | torch.device = "cpu",
+    max_batches: Optional[int] = None,
+) -> Dict[str, float]:
+    """Evaluate trajectory and depth metrics over a labelled DataLoader."""
+
+    from .metrics import evaluate_output
+
+    aggregate: Dict[str, list[float]] = {}
+    for index, batch in enumerate(loader):
+        if max_batches is not None and index >= max_batches:
+            break
+        batch = move_batch(batch, device)
+        if batch.poses is None:
+            continue
+        output = model(batch.events, reset=True)
+        values = evaluate_output(output, batch.poses, batch.depth, batch.depth_mask)
+        for key, value in values.items():
+            aggregate.setdefault(key, []).append(float(value))
+    if not aggregate:
+        raise ValueError("trajectory evaluation requires pose-labelled batches")
+    return {key: sum(values) / len(values) for key, values in aggregate.items()}
+
+
 def synthetic_batch(
     batch_size: int = 2,
     steps: int = 8,
@@ -150,10 +220,13 @@ __all__ = [
     "TrainBatch",
     "move_batch",
     "seed_everything",
+    "save_checkpoint",
+    "load_checkpoint",
     "train_step",
     "evaluate",
     "train_epoch",
     "evaluate_epoch",
+    "evaluate_slam_epoch",
     "synthetic_batch",
 ]
 
