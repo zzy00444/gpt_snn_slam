@@ -78,7 +78,13 @@ class DifferentiableOccupancyMap:
     without changing the SNN front-end API.
     """
 
-    def __init__(self, size: int, extent_m: float = 20.0, decay: float = 0.97) -> None:
+    def __init__(
+        self,
+        size: int,
+        extent_m: float = 20.0,
+        decay: float = 0.97,
+        focal_length_normalized: Tuple[float, float] = (1.0, 1.0),
+    ) -> None:
         if size <= 0 or extent_m <= 0:
             raise ValueError("map size and extent must be positive")
         if not 0.0 <= decay < 1.0:
@@ -86,6 +92,9 @@ class DifferentiableOccupancyMap:
         self.size = int(size)
         self.extent_m = float(extent_m)
         self.decay = float(decay)
+        if focal_length_normalized[0] <= 0 or focal_length_normalized[1] <= 0:
+            raise ValueError("normalised focal lengths must be positive")
+        self.focal_length_normalized = tuple(float(x) for x in focal_length_normalized)
 
     def initial(self, batch: int, device: torch.device, dtype: torch.dtype) -> Tensor:
         return torch.zeros(batch, 1, self.size, self.size, device=device, dtype=dtype)
@@ -103,11 +112,69 @@ class DifferentiableOccupancyMap:
         grid = F.affine_grid(theta, value.shape, align_corners=False)
         return F.grid_sample(value, grid, mode="bilinear", padding_mode="zeros", align_corners=False)
 
-    def update(self, current: Tensor, write: Tensor, translation: Tensor) -> Tensor:
-        if write.shape[-2:] != current.shape[-2:]:
-            write = F.interpolate(write, size=current.shape[-2:], mode="bilinear", align_corners=False)
-        shifted = self._shift(write, translation)
-        return (current * self.decay + shifted * (1.0 - self.decay)).clamp(0.0, 1.0)
+    def _project_depth(self, depth: Tensor, confidence: Tensor, pose: Tensor) -> Tensor:
+        """Differentiably splat a sparse depth confidence image into XY map cells."""
+
+        # Downsampling keeps the geometric write cheap for high-resolution
+        # event cameras while retaining gradients through depth and pose.
+        sample_h, sample_w = min(depth.shape[-2], 24), min(depth.shape[-1], 24)
+        depth = F.interpolate(depth, size=(sample_h, sample_w), mode="bilinear", align_corners=False)
+        confidence = F.interpolate(
+            confidence, size=(sample_h, sample_w), mode="bilinear", align_corners=False
+        ).clamp_min(0.0)
+        axis_y = torch.linspace(-1.0, 1.0, sample_h, device=depth.device, dtype=depth.dtype)
+        axis_x = torch.linspace(-1.0, 1.0, sample_w, device=depth.device, dtype=depth.dtype)
+        yy, xx = torch.meshgrid(axis_y, axis_x, indexing="ij")
+        fx, fy = self.focal_length_normalized
+        z = depth[:, 0].clamp_min(1e-3)
+        camera = torch.stack((xx[None] * z / fx, yy[None] * z / fy, z), dim=-1)
+        rotation = pose[:, :3, :3]
+        translation = pose[:, :3, 3]
+        world = torch.einsum("bij,bhwj->bhwi", rotation, camera) + translation[:, None, None]
+        map_x = (world[..., 0] / self.extent_m + 0.5) * (self.size - 1)
+        map_y = (world[..., 1] / self.extent_m + 0.5) * (self.size - 1)
+        valid = (
+            (map_x >= 0)
+            & (map_x <= self.size - 1)
+            & (map_y >= 0)
+            & (map_y <= self.size - 1)
+        )
+        x_floor = map_x.floor().long().clamp(0, self.size - 1)
+        y_floor = map_y.floor().long().clamp(0, self.size - 1)
+        x_next = (x_floor + 1).clamp(0, self.size - 1)
+        y_next = (y_floor + 1).clamp(0, self.size - 1)
+        wx, wy = map_x - x_floor.float(), map_y - y_floor.float()
+        result = torch.zeros(depth.shape[0], self.size * self.size, device=depth.device, dtype=depth.dtype)
+        batch_index = torch.arange(depth.shape[0], device=depth.device)[:, None, None]
+        confidence = confidence[:, 0] * valid
+        for x_index, y_index, weight in (
+            (x_floor, y_floor, (1 - wx) * (1 - wy)),
+            (x_next, y_floor, wx * (1 - wy)),
+            (x_floor, y_next, (1 - wx) * wy),
+            (x_next, y_next, wx * wy),
+        ):
+            flat_index = (batch_index * self.size * self.size + y_index * self.size + x_index).reshape(-1)
+            values = (confidence * weight).reshape(-1)
+            result.view(-1).index_add_(0, flat_index, values)
+        return result.view(depth.shape[0], 1, self.size, self.size)
+
+    def update(
+        self,
+        current: Tensor,
+        write: Tensor,
+        translation: Optional[Tensor] = None,
+        depth: Optional[Tensor] = None,
+        pose: Optional[Tensor] = None,
+    ) -> Tensor:
+        if depth is not None and pose is not None:
+            projected = self._project_depth(depth, write, pose)
+        else:
+            if translation is None:
+                raise ValueError("translation is required when depth/pose are omitted")
+            if write.shape[-2:] != current.shape[-2:]:
+                write = F.interpolate(write, size=current.shape[-2:], mode="bilinear", align_corners=False)
+            projected = self._shift(write, translation)
+        return (current * self.decay + projected * (1.0 - self.decay)).clamp(0.0, 1.0)
 
 
 class AllSNN_SLAM(SNNBase):
@@ -129,6 +196,7 @@ class AllSNN_SLAM(SNNBase):
         depth_min_m: float = 0.1,
         depth_max_m: float = 20.0,
         pose_scale: Tuple[float, float] = (0.25, 0.25),
+        focal_length_normalized: Tuple[float, float] = (1.0, 1.0),
     ) -> None:
         super().__init__()
         if depth_min_m <= 0 or depth_max_m <= depth_min_m:
@@ -146,7 +214,11 @@ class AllSNN_SLAM(SNNBase):
         # Spatial inverse-depth readout remains fully spiking at the pixel level.
         self.depth_hidden = SpikingConv2d(feature_channels, max(16, feature_channels // 2), 3)
         self.depth_output = SpikingConv2d(max(16, feature_channels // 2), 1, 1, padding=0)
-        self.map = DifferentiableOccupancyMap(map_size, map_extent_m)
+        self.map = DifferentiableOccupancyMap(
+            map_size,
+            map_extent_m,
+            focal_length_normalized=focal_length_normalized,
+        )
         self._stream_states: Dict[str, object] = {}
 
     def reset_state(self) -> None:
@@ -199,7 +271,12 @@ class AllSNN_SLAM(SNNBase):
             depth_spikes, size=frame.shape[-2:], mode="bilinear", align_corners=False
         )
         depth = self.depth_min_m + depth_spikes * self.depth_range_m
-        map_state = self.map.update(map_state, depth_spikes, next_pose[:, :3, 3])
+        map_state = self.map.update(
+            map_state,
+            depth_spikes,
+            depth=depth,
+            pose=next_pose,
+        )
         next_states = {
             "backbone": backbone_state,
             "pose_hidden": pose_hidden_state,

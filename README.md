@@ -71,4 +71,4 @@ snn_slam/
   training.py   train_step、评估和合成 smoke 数据
 ```
 
-这是一个研究基线：地图投影当前使用局部 XY 平移和深度证据，加入相机内参/外参与完整射线投影时无需改动 SNN 接口，只需替换 `DifferentiableOccupancyMap.update`。
+这是一个研究基线：地图更新会用预测深度沿相机射线反投影到局部 XY 栅格，并用预测 SE(3) 位姿变换；默认使用归一化焦距 `(1, 1)`。有真实标定参数时，将其传给 `DifferentiableOccupancyMap(focal_length_normalized=(fx, fy))` 即可。
