@@ -1,5 +1,7 @@
 # GPT SNN SLAM
 
+完整的架构、接口、验证记录和后续路线图见 [PROJECT_REPORT.md](PROJECT_REPORT.md)。
+
 这是一个可训练、可流式推理的端到端全 SNN 事件相机 SLAM 基线。输入事件体素 `[B,T,C,H,W]`，一次前向同时输出：
 
 - 相邻帧 6-DoF twist、积分后的世界坐标位姿 `[B,T,4,4]`；
